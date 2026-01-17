@@ -1,0 +1,49 @@
+name: Gradle Build and Upload Artifacts
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # 新增：预热依赖（先下载依赖，再构建）
+      - name: Download dependencies
+        uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3
+          retry_delay_seconds: 30
+          command: ./gradlew dependencies --no-daemon
+
+      # 构建并添加重试
+      - name: Build with Gradle
+        uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3
+          retry_delay_seconds: 30
+          command: ./gradlew build --no-daemon -x test # 跳过测试加速构建（可选）
+
+      # 上传产物（包含jarJar和slim jar）
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: naven-alpha-build
+          path: |
+            build/libs/
+            build/runtimeClasspath/ # 包含导出的依赖jar
+          if-no-files-found: error
